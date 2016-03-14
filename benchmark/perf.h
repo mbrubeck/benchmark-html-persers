@@ -19,6 +19,8 @@
 #ifndef perf_h
 #define perf_h
 
+#include <stdint.h>
+
 /**
  * Platform-specific hdef performance clock queries.
  * Implemented in perf.c

@@ -6,7 +6,24 @@
 //  Copyright © 2016 Alexander Borisov. All rights reserved.
 //
 
+#include <stdint.h>
+#include <sys/wait.h>
+#include <sys/types.h>
+#include <time.h>
 #include "work.h"
+
+struct timespec diff(struct timespec start, struct timespec end)
+{
+    struct timespec temp;
+    if ((end.tv_nsec-start.tv_nsec)<0) {
+        temp.tv_sec = end.tv_sec-start.tv_sec-1;
+        temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
+    } else {
+        temp.tv_sec = end.tv_sec-start.tv_sec;
+        temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+    }
+    return temp;
+}
 
 struct benchmark_res_html {
     char  *html;
@@ -49,21 +66,22 @@ void benchmark_work(const char *filepath, const char *filename, benchmark_work_c
 {
     struct benchmark_res_html res = benchmark_load_html_file(filepath);
     
-    uint64_t time_start = myhtml_hperf_clock();
+    struct timespec time_start, time_end;
+    clock_gettime(CLOCK_MONOTONIC, &time_start);
     
     callback(filename, res.html, res.size, ctx);
     
-    uint64_t time_end = myhtml_hperf_clock();
+    clock_gettime(CLOCK_MONOTONIC, &time_end);
     
     free(res.html);
     
-    double work_time = myhtml_absolute_difference(time_start, time_end);
+    struct timespec dt = diff(time_start, time_end);
     
     ctx->count++;
-    ctx->sum += work_time;
+    //ctx->sum += work_time;
     ctx->total_file_size += res.size;
     
-    fprintf(out_fh, "\"%s\";%zu;%0.5f;%lld\n", filename, res.size, work_time, 0LL);
+    fprintf(out_fh, "\"%s\";%zu;%lld.%09lld;%lld\n", filename, res.size, dt.tv_sec, dt.tv_nsec, 0LL);
 }
 
 void benchmark_work_fork(const char *filepath, const char *filename, benchmark_work_callback_f callback, FILE *out_fh)
@@ -72,19 +90,20 @@ void benchmark_work_fork(const char *filepath, const char *filename, benchmark_w
     struct benchmark_ctx ctx = {0, 0, NULL, 0};
     
     size_t mem_start    = proc_stat_getPeakRSS();
-    uint64_t time_start = myhtml_hperf_clock();
+    struct timespec time_start, time_end;
+    clock_gettime(CLOCK_MONOTONIC, &time_start);
     
     callback(filename, res.html, res.size, &ctx);
     
-    uint64_t time_end = myhtml_hperf_clock();
+    clock_gettime(CLOCK_MONOTONIC, &time_end);
     size_t mem_end    = proc_stat_getPeakRSS();
     
     free(res.html);
     
     long long mem_used = mem_end - mem_start;
-    double work_time = myhtml_absolute_difference(time_start, time_end);
+    struct timespec dt = diff(time_start, time_end);
     
-    fprintf(out_fh, "\"%s\";%zu;%0.5f;%lld\n", filename, res.size, work_time, mem_used);
+    fprintf(out_fh, "\"%s\";%zu;%lld.%09lld;%lld\n", filename, res.size, dt.tv_sec, dt.tv_nsec, mem_used);
 }
 
 void benchmark_work_readdir_fork(const char *dirpath, benchmark_work_callback_f callback, FILE *out_fh)
